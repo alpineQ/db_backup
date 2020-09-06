@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="/static/db_backup/bootstrap.min.css">
+
+    <title>DB Backup</title>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+    <div class="container-fluid">
+    <a class="navbar-brand" href="/index/">SMS</a>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+    <span class="navbar-text ml-auto">
+        <a href="/auth/profile/">username [group]</a>
+        <a class="btn btn-sm align-middle btn-outline-secondary btn-danger" type="button" href="/auth/logout">Выйти</a>
+    </span>
+    </div>
+</nav>
+
+<div class="container mb-3 mt-3">
+
+
+    <h1>DB Backup</h1>
+    
+    <div class="list-group">
+    {{ range . }}
+    {{$containerName := index .Names 0}}
+        <a href="/db_backup{{ $containerName }}" class="list-group-item list-group-item-action flex-column align-items-start
+        list-group-item-light">
+            <div class="row pt-1">
+                <h3 class="col-md-9">
+                    {{ $containerName }}
+                </h3>
+                <form class="col-sm-3 btn-group pb-1 pr-5">
+                    <button formaction="/db_backup{{ $containerName }}/restore/" formmethod="post" class="btn btn-danger">
+                        Restore
+                    </button>
+                    <button formaction="/db_backup{{ $containerName }}/backup/" formmethod="post" class="btn btn-success">
+                        Backup
+                    </button>
+                </form>
+            </div>
+        </a>
+        {{ end }}
+    </div>
+
+</div>
+
+<script src="/static/db_backup/popper.min.js"></script>
+<script src="/static/db_backup/bootstrap.min.js"></script>
+</body>
+</html>
