@@ -14,8 +14,7 @@ var client, _ = docker.NewClientFromEnv()
 
 func main() {
 	r := mux.NewRouter()
-	fs := http.FileServer(http.Dir("static"))
-	r.Handle("/static/db_backup/", http.StripPrefix("/static/db_backup/", fs))
+	r.PathPrefix("/static/db_backup/").Handler(http.StripPrefix("/static/db_backup/", http.FileServer(http.Dir("static"))))
 
 	r.HandleFunc("/", index)
 
