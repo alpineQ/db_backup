@@ -36,11 +36,11 @@
                     {{ $containerName }}
                 </h3>
                 <form class="col-sm-3 btn-group pb-1 pr-5">
-                    <button formaction="/db_backup{{ $containerName }}/restore/" formmethod="post" class="btn btn-danger">
-                        Restore
+                    <button formaction="/db_backup{{ $containerName }}/restore/" formmethod="post" class="btn btn-primary">
+                        <b>Restore</b>
                     </button>
                     <button formaction="/db_backup{{ $containerName }}/backup/" formmethod="post" class="btn btn-success">
-                        Backup
+                        <b>Backup</b>
                     </button>
                 </form>
             </div>

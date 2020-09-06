@@ -6,25 +6,27 @@ import (
 	"net/http"
 
 	docker "github.com/fsouza/go-dockerclient"
+	"github.com/gorilla/mux"
 )
 
 var tpl = template.Must(template.ParseFiles("index.html"))
+var client, _ = docker.NewClientFromEnv()
 
 func main() {
-	client, err := docker.NewClientFromEnv()
+	r := mux.NewRouter()
+	fs := http.FileServer(http.Dir("static"))
+	r.Handle("/static/db_backup/", http.StripPrefix("/static/db_backup/", fs))
+
+	r.HandleFunc("/", index)
+
+	http.Handle("/", r)
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func index(w http.ResponseWriter, r *http.Request) {
+	containers, err := client.ListContainers(docker.ListContainersOptions{All: true})
 	if err != nil {
 		panic(err)
 	}
-
-	fs := http.FileServer(http.Dir("static"))
-	http.Handle("/static/db_backup/", http.StripPrefix("/static/db_backup/", fs))
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		containers, err := client.ListContainers(docker.ListContainersOptions{All: true})
-		if err != nil {
-			panic(err)
-		}
-		tpl.Execute(w, containers)
-	})
-
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	tpl.Execute(w, containers)
 }
