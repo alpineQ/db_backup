@@ -28,18 +28,18 @@
     
     <div class="list-group">
     {{ range . }}
-    {{$containerName := index .Names 0}}
-        <a href="/db_backup{{ $containerName }}" class="list-group-item list-group-item-action flex-column align-items-start
+    {{ $containerID := .ID }}
+        <a href="/db_backup/{{ $containerID }}/" class="list-group-item list-group-item-action flex-column align-items-start
         list-group-item-light">
             <div class="row pt-1">
                 <h3 class="col-md-9">
-                    {{ $containerName }}
+                    {{ index .Names 0 }}
                 </h3>
                 <form class="col-sm-3 btn-group pb-1 pr-5">
-                    <button formaction="/db_backup{{ $containerName }}/restore/" formmethod="post" class="btn btn-primary">
+                    <button formaction="/db_backup/{{ $containerID }}/restore/" formmethod="post" class="btn btn-primary">
                         <b>Restore</b>
                     </button>
-                    <button formaction="/db_backup{{ $containerName }}/backup/" formmethod="post" class="btn btn-success">
+                    <button formaction="/db_backup/{{ $containerID }}/backup/" formmethod="post" class="btn btn-success">
                         <b>Backup</b>
                     </button>
                 </form>
