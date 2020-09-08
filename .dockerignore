@@ -1,2 +1,5 @@
 .git
+.gitignore
 .vscode
+Dockerfile
+microservice_cfg.json

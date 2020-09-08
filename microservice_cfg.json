@@ -1,0 +1,7 @@
+{
+	"service_name": "db_backup",
+	"service_fullname": "Резервное копирование",
+	"default_urn": "/db_backup/",
+	"scope": "admin",
+    "app_port": 8080
+}

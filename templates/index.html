@@ -15,7 +15,7 @@
         <span class="navbar-toggler-icon"></span>
     </button>
     <span class="navbar-text ml-auto">
-        <a href="/auth/profile/">username [group]</a>
+        <a href="/auth/profile/">{{ .Username }} [{{ .Group }}]</a>
         <a class="btn btn-sm align-middle btn-outline-secondary btn-danger" type="button" href="/auth/logout">Выйти</a>
     </span>
     </div>
@@ -27,7 +27,7 @@
     <div class="col">
       <div class="list-group" id="list-tab" role="tablist">
         {{ $firstElement := true }}
-        {{ range $containerName, $backups := . }}
+        {{ range $containerName, $backups := .DBInfo }}
         {{ if $firstElement }}
         <a class="list-group-item list-group-item-action active" data-toggle="list" href="#list-{{ $containerName }}" role="tab">
             <b>{{ $containerName }}</b>
@@ -44,7 +44,7 @@
     <div class="col-8">
       <div class="tab-content" id="nav-tabContent">
         {{ $firstElement := true }}
-        {{ range $containerName, $backups := . }}
+        {{ range $containerName, $backups := .DBInfo }}
         {{ if $firstElement }}
         <div class="tab-pane fade show active" id="list-{{ $containerName }}" role="tabpanel">
         {{ $firstElement = false }}
