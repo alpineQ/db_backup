@@ -14,4 +14,4 @@
 | restore_cmd | команда/скрипт, выполняющая восстановление резервной копии      | ["mongorestore", "-v", "--dir=/data/dump/$date"] |
 | backup_freq | частота создания резервных копий в [традиционном cron формате](http://www.nncron.ru/help/RU/working/cron-format.htm)     | "0 2 * * *" |
 
-**Примечание**: `$date` в *backup_cmd* и *restore_cmd* будет заменен на текущую дату
+**Примечание**: `$date` в *backup_cmd* и *restore_cmd* будет заменен на текущую дату/выбранную резервную копию

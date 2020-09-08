@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	config "github.com/alpineQ/db_backup/pkg"
 	jwt "github.com/dgrijalva/jwt-go"
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/gorilla/mux"
@@ -22,149 +24,101 @@ var tpl = template.Must(template.ParseFiles("templates/index.html"))
 
 // IndexData Структура предоставляемая Index для сборки HTML страницы
 type IndexData struct {
-	DBInfo   map[string][]string
+	DBInfos  []DBInfo
 	Username string
 	Group    string
 }
 
-// Index Основная страница приложения
-func Index(w http.ResponseWriter, r *http.Request) {
-	dbInfo := make(map[string][]string)
+// DBInfo Информация о конкретной БД
+type DBInfo struct {
+	Name    string
+	Backups []string
+	Status  string
+}
+
+// IndexRoute Основная страница приложения
+func IndexRoute(w http.ResponseWriter, r *http.Request) {
+	var dbInfos = []DBInfo{}
 	containerFolders, err := ioutil.ReadDir("backups")
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, containerFolder := range containerFolders {
-		if !containerFolder.IsDir() {
-			continue
+	for _, dbConfig := range config.Config.DBConfigs {
+		dbInfos = append(dbInfos, DBInfo{Name: dbConfig.Name, Status: "Down"})
+		for _, containerFolder := range containerFolders {
+			if !containerFolder.IsDir() {
+				continue
+			}
+			if dbConfig.Name == containerFolder.Name() {
+				backupFiles, err := ioutil.ReadDir("backups/" + containerFolder.Name())
+				if err != nil {
+					log.Fatal(err)
+				}
+				var containerBackups []string
+				for _, backup := range backupFiles {
+					containerBackups = append(containerBackups, backup.Name()[:len(backup.Name())-4])
+				}
+				for dbIndex, db := range dbInfos {
+					if db.Name == dbConfig.Name {
+						dbInfos[dbIndex].Backups = containerBackups
+						break
+					}
+				}
+			}
 		}
-		backupFiles, err := ioutil.ReadDir("backups/" + containerFolder.Name())
-		if err != nil {
-			log.Fatal(err)
-		}
-		var containerBackups []string
-		for _, backup := range backupFiles {
-			containerBackups = append(containerBackups, backup.Name()[:len(backup.Name())-4])
-		}
-		dbInfo[containerFolder.Name()] = containerBackups
 	}
 
-	containers, err := client.ListContainers(
-		docker.ListContainersOptions{
-			Filters: map[string][]string{
-				"status": []string{"running"}}})
+	containers, err := client.ListContainers(docker.ListContainersOptions{Filters: map[string][]string{}})
 	if err != nil {
 		log.Printf("Error: %s", err)
 	}
 	for _, container := range containers {
-		if len(dbInfo[container.Names[0][1:]]) == 0 {
-			dbInfo[container.Names[0][1:]] = []string{}
+		for dbIndex, db := range dbInfos {
+			if container.Names[0][1:] == db.Name {
+				dbInfos[dbIndex].Status = container.Status
+			}
 		}
 	}
-
 	username, group := GetAuthData(r)
 
-	tpl.Execute(w, IndexData{DBInfo: dbInfo, Username: username, Group: group})
+	tpl.Execute(w, IndexData{DBInfos: dbInfos, Username: username, Group: group})
 }
 
-// Backup End-point резервного копирования
-func Backup(w http.ResponseWriter, r *http.Request) {
+// BackupRoute End-point резервного копирования
+func BackupRoute(w http.ResponseWriter, r *http.Request) {
 	containerName := mux.Vars(r)["container_name"]
-	containers, err := client.ListContainers(
-		docker.ListContainersOptions{Filters: map[string][]string{
-			"name": []string{containerName}}})
-	if err != nil || len(containers) != 1 {
-		log.Printf("Error: %s", err)
+	for _, db := range config.Config.DBConfigs {
+		if db.Name == containerName {
+			if err := Backup(db.Name, db.BackupCMD); err != nil {
+				log.Panic(err)
+				return
+			}
+			http.Redirect(w, r, "/db_backup/", http.StatusFound)
+			return
+		}
 	}
-	containerID := containers[0].ID
-	backupName := time.Now().Format("02-01-2006-15:04")
-	backupFilePath := "backups/" + containerName + "/" + backupName + ".tar"
-
-	execInfo, err := client.CreateExec(docker.CreateExecOptions{
-		AttachStderr: true,
-		AttachStdout: true,
-		AttachStdin:  true,
-		Tty:          false,
-		Cmd:          []string{"mongodump", "--out=/data/dump/" + backupName},
-		Container:    containerID,
-	})
-	if err != nil {
-		log.Printf("Error: %s", err)
-		return
-	}
-	var buffer bytes.Buffer
-	if err = client.StartExec(execInfo.ID, docker.StartExecOptions{
-		OutputStream: &buffer,
-		ErrorStream:  &buffer,
-	}); err != nil {
-		log.Printf("Error: %s", err)
-		return
-	}
-
-	if err := os.MkdirAll(filepath.Dir(backupFilePath), 0770); err != nil {
-		log.Printf("Error: %s", err)
-		return
-	}
-	backupFile, err := os.Create(backupFilePath)
-	if err != nil {
-		log.Printf("Error: %s", err)
-		return
-	}
-	defer backupFile.Close()
-	client.DownloadFromContainer(containerID, docker.DownloadFromContainerOptions{
-		Path:         "/data/dump/" + backupName,
-		OutputStream: backupFile,
-	})
-	http.Redirect(w, r, "/db_backup/", http.StatusFound)
+	fmt.Fprintf(w, "DB not found!")
 }
 
-// Restore End-point восстановления резервной копии
-func Restore(w http.ResponseWriter, r *http.Request) {
+// RestoreRoute End-point восстановления резервной копии
+func RestoreRoute(w http.ResponseWriter, r *http.Request) {
 	containerName := mux.Vars(r)["container_name"]
-	containers, err := client.ListContainers(
-		docker.ListContainersOptions{Filters: map[string][]string{
-			"name": []string{containerName}}})
-	if err != nil || len(containers) != 1 {
-		log.Printf("Error: %s", err)
-	}
-	containerID := containers[0].ID
-
 	backupDate := r.FormValue("date")
 	if backupDate == "" {
 		fmt.Fprint(w, ":(")
 		return
 	}
-	backupFile, err := os.Open("backups/" + containerName + "/" + backupDate + ".tar")
-	if err != nil {
-		log.Printf("Error: %s", err)
-		return
+	for _, db := range config.Config.DBConfigs {
+		if db.Name == containerName {
+			if err := Restore(db.Name, db.RestoreCMD, backupDate); err != nil {
+				log.Panic(err)
+				return
+			}
+			http.Redirect(w, r, "/db_backup/", http.StatusFound)
+			return
+		}
 	}
-	defer backupFile.Close()
-	client.UploadToContainer(containerID, docker.UploadToContainerOptions{
-		Path:        "/data/dump/",
-		InputStream: backupFile,
-	})
-	execInfo, err := client.CreateExec(docker.CreateExecOptions{
-		AttachStderr: true,
-		AttachStdout: true,
-		AttachStdin:  true,
-		Tty:          false,
-		Cmd:          []string{"mongorestore", "-v", "--dir=/data/dump/" + backupDate},
-		Container:    containerID,
-	})
-	if err != nil {
-		log.Printf("Error: %s", err)
-		return
-	}
-	var buffer bytes.Buffer
-	if err = client.StartExec(execInfo.ID, docker.StartExecOptions{
-		OutputStream: &buffer,
-		ErrorStream:  &buffer,
-	}); err != nil {
-		log.Printf("Error: %s", err)
-		return
-	}
-	http.Redirect(w, r, "/db_backup/", http.StatusFound)
+	fmt.Fprintf(w, "DB not found!")
 }
 
 func getKeyByID(token *jwt.Token) (interface{}, error) {
@@ -175,8 +129,11 @@ func getKeyByID(token *jwt.Token) (interface{}, error) {
 	if keyID == "" {
 		return "", errors.New("Invalid JWT")
 	}
-
-	resp, err := http.Get("http://gateway/auth/public_key/" + fmt.Sprintf("%v", keyID))
+	authURL := os.Getenv("AUTH_URL")
+	if authURL == "" {
+		authURL = "https://sms.gitwork.ru/auth"
+	}
+	resp, err := http.Get(authURL + "/public_key/" + fmt.Sprintf("%v", keyID))
 	if err != nil {
 		return "", err
 	}
@@ -210,4 +167,104 @@ func GetAuthData(r *http.Request) (string, string) {
 		return fmt.Sprintf("%v", claims["username"]), fmt.Sprintf("%v", claims["group"])
 	}
 	return "", ""
+}
+
+// Backup Создание резервной копии
+func Backup(containerName string, backupCmd []string) error {
+	containers, err := client.ListContainers(
+		docker.ListContainersOptions{Filters: map[string][]string{
+			"name": []string{containerName}}})
+	if err != nil || len(containers) != 1 {
+		return err
+	}
+	containerID := containers[0].ID
+	backupName := time.Now().Format("02-01-2006-15:04")
+	backupFilePath := "backups/" + containerName + "/" + backupName + ".tar"
+
+	for index, elem := range backupCmd {
+		if strings.Contains(elem, "$date") {
+			backupCmd[index] = strings.Replace(backupCmd[index], "$date", backupName, -1)
+		}
+	}
+
+	execInfo, err := client.CreateExec(docker.CreateExecOptions{
+		AttachStderr: true,
+		AttachStdout: true,
+		AttachStdin:  true,
+		Tty:          false,
+		Cmd:          backupCmd,
+		Container:    containerID,
+	})
+	if err != nil {
+		return err
+	}
+	var buffer bytes.Buffer
+	if err = client.StartExec(execInfo.ID, docker.StartExecOptions{
+		OutputStream: &buffer,
+		ErrorStream:  &buffer,
+	}); err != nil {
+		return err
+	}
+	fmt.Printf(buffer.String())
+
+	if err := os.MkdirAll(filepath.Dir(backupFilePath), 0770); err != nil {
+		return err
+	}
+	backupFile, err := os.Create(backupFilePath)
+	if err != nil {
+		return err
+	}
+	defer backupFile.Close()
+	client.DownloadFromContainer(containerID, docker.DownloadFromContainerOptions{
+		Path:         "/data/dump/" + backupName,
+		OutputStream: backupFile,
+	})
+	return nil
+}
+
+// Restore Восстановление резервной копии
+func Restore(containerName string, restoreCmd []string, backupName string) error {
+	containers, err := client.ListContainers(
+		docker.ListContainersOptions{Filters: map[string][]string{
+			"name": []string{containerName}}})
+	if err != nil || len(containers) != 1 {
+		log.Printf("Error: %s", err)
+	}
+	containerID := containers[0].ID
+
+	for index, elem := range restoreCmd {
+		if strings.Contains(elem, "$date") {
+			restoreCmd[index] = strings.Replace(restoreCmd[index], "$date", backupName, -1)
+		}
+	}
+
+	backupFile, err := os.Open("backups/" + containerName + "/" + backupName + ".tar")
+	if err != nil {
+		return err
+	}
+	defer backupFile.Close()
+	client.UploadToContainer(containerID, docker.UploadToContainerOptions{
+		Path:        "/data/dump/",
+		InputStream: backupFile,
+	})
+	execInfo, err := client.CreateExec(docker.CreateExecOptions{
+		AttachStderr: true,
+		AttachStdout: true,
+		AttachStdin:  true,
+		Tty:          false,
+		Cmd:          restoreCmd,
+		Container:    containerID,
+	})
+	if err != nil {
+		return err
+	}
+	var buffer bytes.Buffer
+	if err = client.StartExec(execInfo.ID, docker.StartExecOptions{
+		OutputStream: &buffer,
+		ErrorStream:  &buffer,
+	}); err != nil {
+		return err
+	}
+	fmt.Printf(buffer.String())
+	return nil
 }
