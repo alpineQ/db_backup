@@ -3,5 +3,8 @@
 	"service_fullname": "Резервное копирование",
 	"default_urn": "/db_backup/",
 	"scope": "admin",
-    "app_port": 8080
+	"app_port": 8080,
+	"static": "/static/",
+	"docker_sdk": true,
+	"volumes": ["/backups"]
 }
