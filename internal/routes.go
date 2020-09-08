@@ -20,14 +20,14 @@ import (
 var client, _ = docker.NewClientFromEnv()
 var tpl = template.Must(template.ParseFiles("templates/index.html"))
 
-// IndexData smt
+// IndexData Структура предоставляемая Index для сборки HTML страницы
 type IndexData struct {
 	DBInfo   map[string][]string
 	Username string
 	Group    string
 }
 
-// Index smt
+// Index Основная страница приложения
 func Index(w http.ResponseWriter, r *http.Request) {
 	dbInfo := make(map[string][]string)
 	containerFolders, err := ioutil.ReadDir("backups")
@@ -67,7 +67,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 	tpl.Execute(w, IndexData{DBInfo: dbInfo, Username: username, Group: group})
 }
 
-// Backup smt
+// Backup End-point резервного копирования
 func Backup(w http.ResponseWriter, r *http.Request) {
 	containerName := mux.Vars(r)["container_name"]
 	containers, err := client.ListContainers(
@@ -118,7 +118,7 @@ func Backup(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/db_backup/", http.StatusFound)
 }
 
-// Restore smt
+// Restore End-point восстановления резервной копии
 func Restore(w http.ResponseWriter, r *http.Request) {
 	containerName := mux.Vars(r)["container_name"]
 	containers, err := client.ListContainers(
@@ -167,8 +167,6 @@ func Restore(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/db_backup/", http.StatusFound)
 }
 
-// InvalidJWTError smt
-
 func getKeyByID(token *jwt.Token) (interface{}, error) {
 	if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 		return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
@@ -194,7 +192,7 @@ func getKeyByID(token *jwt.Token) (interface{}, error) {
 	return publicKey, nil
 }
 
-// GetAuthData smt
+// GetAuthData Функция получения данных авторизации из запроса
 func GetAuthData(r *http.Request) (string, string) {
 	cookie, err := r.Cookie("user_jwt")
 	if err != nil {
